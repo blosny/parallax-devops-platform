@@ -1,0 +1,64 @@
+# AI & Local Development Context Files
+AGENTS.md
+docs/AGENTS.md
+RELEASES.md
+docs/RELEASES.md
+DEV_LOG.md
+*.local.md
+
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Docker
+*.tar
+
+# Terraform (İlerleyen haftalar için)
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl
