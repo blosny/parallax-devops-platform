@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parallax Labs | DevOps Platform Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #000000;
+            --bg-card: #08090b;
+            --bg-card-inner: #0e1116;
+            --border: #181b20;
+            --border-hover: #262a33;
+            --text-primary: #f0f2f5;
+            --text-secondary: #7d8590;
+            --text-muted: #484f58;
+            --accent-green: #238636;
+            --accent-green-soft: #3fb950;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Top Navigation */
+        nav {
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #000000;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+
+        .logo-symbol {
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+            background: #6366f1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #fff;
+        }
+
+        .brand-title {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: #ffffff;
+        }
+
+        .brand-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+            padding-left: 0.5rem;
+            border-left: 1px solid var(--border);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .nav-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            background: #0d0f12;
+            padding: 0.35rem 0.8rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-family: var(--font-mono);
+        }
+
+        .dot-pulse {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--accent-green-soft);
+        }
+
+        /* Main Container */
+        main {
+            flex: 1;
+            max-width: 1050px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+        }
+
+        .hero-section {
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-tag {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #6366f1;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            display: block;
+            font-family: var(--font-mono);
+        }
+
+        .hero-section h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+
+        .hero-section p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Service Cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .service-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: border-color 0.2s;
+        }
+
+        .service-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.25rem;
+        }
+
+        .service-name {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 0.2rem;
+        }
+
+        .service-port {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+
+        .badge-status {
+            font-size: 0.72rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 4px;
+            font-weight: 500;
+            font-family: var(--font-mono);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .badge-healthy {
+            background: rgba(35, 134, 54, 0.15);
+            color: var(--accent-green-soft);
+            border: 1px solid rgba(35, 134, 54, 0.3);
+        }
+
+        .badge-offline {
+            background: rgba(248, 81, 73, 0.1);
+            color: #f85149;
+            border: 1px solid rgba(248, 81, 73, 0.2);
+        }
+
+        .data-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+            margin-bottom: 1.25rem;
+            border-top: 1px solid var(--border);
+            padding-top: 0.85rem;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.84rem;
+        }
+
+        .data-label {
+            color: var(--text-secondary);
+        }
+
+        .data-value {
+            font-family: var(--font-mono);
+            font-weight: 400;
+            color: #d0d7de;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        .btn {
+            background-color: #161b22;
+            border: 1px solid var(--border);
+            color: #c9d1d9;
+            padding: 0.45rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-family: var(--font-mono);
+        }
+
+        .btn:hover {
+            background-color: #21262d;
+            border-color: #30363d;
+            color: #ffffff;
+        }
+
+        .btn-active {
+            background-color: #21262d;
+            border-color: #388bfd;
+            color: #58a6ff;
+        }
+
+        /* Console Output */
+        .terminal-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .terminal-bar {
+            background-color: #0d1117;
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #21262d;
+        }
+
+        .terminal-body {
+            padding: 1.25rem;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            color: #c9d1d9;
+            overflow-x: auto;
+            min-height: 110px;
+            line-height: 1.6;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 1.5rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="nav-brand">
+            <div class="logo-symbol">P</div>
+            <div class="brand-title">Parallax Labs</div>
+            <span class="brand-subtitle">DevOps Platform</span>
+        </div>
+        <div class="nav-status">
+            <span class="dot-pulse"></span>
+            Non-Root (USER 1001) Verified
+        </div>
+    </nav>
+
+    <main>
+        <div class="hero-section">
+            <span class="hero-tag">Track B • Week 1 Foundation</span>
+            <h1>Service Observability & Health</h1>
+            <p>Containerized microservices operating under production isolation contracts.</p>
+        </div>
+
+        <div class="card-grid">
+            <!-- Frontend Service Card -->
+            <div class="service-card">
+                <div class="card-top">
+                    <div>
+                        <div class="service-name">Frontend Microservice</div>
+                        <div class="service-port">HTTP :3000 • Nginx 1.27 Alpine</div>
+                    </div>
+                    <span class="badge-status badge-healthy">● ONLINE</span>
+                </div>
+                <div class="data-rows">
+                    <div class="data-row">
+                        <span class="data-label">Security Context</span>
+                        <span class="data-value">USER 1001 (appuser)</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Build Architecture</span>
+                        <span class="data-value">Multi-Stage Alpine</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Exposed Contracts</span>
+                        <span class="data-value">/health, /info</span>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="btn" onclick="probeLocal('/health')">curl /health</button>
+                    <button class="btn" onclick="probeLocal('/info')">curl /info</button>
+                </div>
+            </div>
+
+            <!-- Backend Service Card -->
+            <div class="service-card">
+                <div class="card-top">
+                    <div>
+                        <div class="service-name">Backend API Microservice</div>
+                        <div class="service-port">HTTP :8000 • Python 3.11 FastAPI</div>
+                    </div>
+                    <span class="badge-status badge-healthy" id="be-badge">● READY</span>
+                </div>
+                <div class="data-rows">
+                    <div class="data-row">
+                        <span class="data-label">Security Context</span>
+                        <span class="data-value">USER 1001 (appuser)</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Active Uptime</span>
+                        <span class="data-value" id="be-uptime">--</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">API Documentation</span>
+                        <span class="data-value"><a href="http://localhost:8000/docs" target="_blank" style="color: #58a6ff; text-decoration: none;">Swagger /docs ↗</a></span>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-active" onclick="probeBackend('/health')">Probe /health</button>
+                    <button class="btn" onclick="probeBackend('/info')">Probe /info</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="terminal-container">
+            <div class="terminal-bar">
+                <div class="terminal-dots">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+                <span id="term-status">HTTP Inspector • Standby</span>
+                <span id="term-clock">UTC</span>
+            </div>
+            <pre class="terminal-body" id="term-output">// Click a probe button above to inspect live container response data...</pre>
+        </div>
+    </main>
+
+    <footer>
+        <div>Parallax Labs • 6-Week DevOps Internship</div>
+        <div>Built Different. Engineered Better.</div>
+    </footer>
+
+    <script>
+        const outputEl = document.getElementById('term-output');
+        const statusEl = document.getElementById('term-status');
+        const clockEl = document.getElementById('term-clock');
+        const beBadge = document.getElementById('be-badge');
+        const beUptime = document.getElementById('be-uptime');
+
+        async function probeLocal(endpoint) {
+            statusEl.innerText = 'Requesting ' + endpoint + '...';
+            try {
+                const res = await fetch(endpoint);
+                const data = await res.json();
+                outputEl.style.color = '#c9d1d9';
+                outputEl.innerText = JSON.stringify(data, null, 2);
+                statusEl.innerText = 'HTTP ' + res.status + ' OK';
+                clockEl.innerText = new Date().toLocaleTimeString();
+            } catch (err) {
+                outputEl.style.color = '#f85149';
+                outputEl.innerText = '// Error fetching ' + endpoint + ':\n' + err.message;
+                statusEl.innerText = 'Request Failed';
+            }
+        }
+
+        async function probeBackend(endpoint) {
+            const url = 'http://localhost:8000' + endpoint;
+            statusEl.innerText = 'Connecting to ' + url + '...';
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                outputEl.style.color = '#c9d1d9';
+                outputEl.innerText = JSON.stringify(data, null, 2);
+                statusEl.innerText = 'HTTP ' + res.status + ' OK (FastAPI)';
+                clockEl.innerText = new Date().toLocaleTimeString();
+
+                if (data.status === 'healthy') {
+                    beBadge.innerText = '● HEALTHY';
+                    beBadge.className = 'badge-status badge-healthy';
+                }
+                if (data.uptime_seconds !== undefined) {
+                    beUptime.innerText = data.uptime_seconds + 's';
+                }
+            } catch (err) {
+                outputEl.style.color = '#f85149';
+                outputEl.innerText = '// Connection to Backend failed at ' + url + '.\n' +
+                                     'Details: ' + err.message;
+                statusEl.innerText = 'Backend Unreachable';
+                beBadge.innerText = '● OFFLINE';
+                beBadge.className = 'badge-status badge-offline';
+            }
+        }
+
+        // Auto probe backend on load
+        window.addEventListener('DOMContentLoaded', () => {
+            probeBackend('/health');
+        });
+    </script>
+</body>
+</html>
