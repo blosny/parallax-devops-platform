@@ -1,0 +1,13 @@
+{{- if .Values.security.mtls.enabled }}
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  mtls:
+    mode: {{ .Values.security.mtls.mode | default "STRICT" }}
+{{- end }}
