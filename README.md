@@ -37,7 +37,7 @@ This repository maintains the entire 6-week progressive infrastructure lifecycle
 
 ---
 
-## 🏗️ Week 2 Architecture & Service Mesh Mesh Boundary
+## 🏗️ Week 2 Architecture & Service Mesh Boundary
 
 ```mermaid
 graph TB
@@ -73,7 +73,7 @@ graph TB
     BE_Proxy -->|Plaintext Localhost Loopback| BE_App
 
     UnauthenticatedClient -.->|Plaintext HTTP GET| BE_Proxy
-    BE_Proxy -.-x|DENIED: Connection Reset by Peer (Error 56)| UnauthenticatedClient
+    BE_Proxy -.-x|"DENIED: Connection Reset by Peer - Error 56"| UnauthenticatedClient
 ```
 
 ---
