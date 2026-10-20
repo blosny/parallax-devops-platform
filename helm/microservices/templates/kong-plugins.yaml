@@ -1,0 +1,51 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: rate-limit-5
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+plugin: rate-limiting
+config:
+  minute: {{ .Values.gateway.rateLimiting.minute | default 5 }}
+  policy: {{ .Values.gateway.rateLimiting.policy | default "local" }}
+  fault_tolerant: true
+  hide_client_headers: false
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: api-key-auth
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+plugin: key-auth
+config:
+  key_names:
+    - {{ .Values.gateway.apiKeyAuth.keyName | default "apikey" }}
+  hide_credentials: true
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongConsumer
+metadata:
+  name: {{ .Values.gateway.apiKeyAuth.consumer | default "parallax-developer" }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/ingress.class: {{ .Values.gateway.ingressClass | default "kong" }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+username: {{ .Values.gateway.apiKeyAuth.consumer | default "parallax-developer" }}
+credentials:
+  - parallax-api-key
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: parallax-api-key
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    konghq.com/credential: key-auth
+type: Opaque
+stringData:
+  key: {{ .Values.gateway.apiKeyAuth.secretKey | default "parallax-secret-key-2026" }}

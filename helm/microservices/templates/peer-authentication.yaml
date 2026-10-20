@@ -2,12 +2,30 @@
 apiVersion: security.istio.io/v1beta1
 kind: PeerAuthentication
 metadata:
-  name: default
+  name: backend-strict-mtls
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ .Chart.Name }}
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.backend.name }}
   mtls:
-    mode: {{ .Values.security.mtls.mode | default "STRICT" }}
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: frontend-gateway-mtls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.frontend.name }}
+  mtls:
+    mode: PERMISSIVE
 {{- end }}

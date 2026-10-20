@@ -70,3 +70,13 @@ security:
   mtls:
     enabled: true
     mode: STRICT
+
+gateway:
+  ingressClass: kong
+  rateLimiting:
+    minute: 5
+    policy: local
+  apiKeyAuth:
+    keyName: apikey
+    consumer: parallax-developer
+    secretKey: parallax-secret-key-2026
