@@ -1,14 +1,18 @@
 """
 Parallax DevOps Platform - Backend Microservice
-Production-grade FastAPI JSON API implementing standardized /health and /info endpoints.
+Production-grade FastAPI JSON API implementing standardized /health, /info, /metrics endpoints
+and RED (Rate, Errors, Duration) observability instrumentation.
 """
 
+import asyncio
 from datetime import datetime, timezone
 import os
 import sys
 import time
-from fastapi import FastAPI, status
+from typing import Callable
+from fastapi import FastAPI, Request, Response, status, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 # Application metadata & environment configurations
@@ -19,9 +23,47 @@ ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 # Record server boot timestamp to calculate uptime accurately
 START_TIME: float = time.time()
 
+# Prometheus metrics setup (with zero-dependency fallback)
+try:
+    from prometheus_client import (
+        Counter,
+        Histogram,
+        Gauge,
+        generate_latest,
+        CONTENT_TYPE_LATEST,
+        REGISTRY,
+    )
+    PROMETHEUS_AVAILABLE = True
+
+    REQUEST_COUNT = Counter(
+        "http_requests_total",
+        "Total number of HTTP requests processed by endpoint and status code.",
+        ["method", "endpoint", "status"],
+    )
+    REQUEST_LATENCY = Histogram(
+        "http_request_duration_seconds",
+        "Histogram of HTTP request latency in seconds.",
+        ["method", "endpoint"],
+        buckets=(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0),
+    )
+    IN_PROGRESS = Gauge(
+        "http_requests_in_progress",
+        "Number of HTTP requests currently being processed.",
+        ["method", "endpoint"],
+    )
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    # In-memory metrics fallback
+    _fallback_stats = {
+        "requests_total": 0,
+        "errors_total": 0,
+        "latency_sum": 0.0,
+        "status_counts": {},
+    }
+
 app = FastAPI(
     title="Parallax DevOps Platform - Backend API",
-    description="Enterprise-grade FastAPI microservice with /health and /info contracts.",
+    description="Enterprise-grade FastAPI microservice with /health, /info, /metrics contracts.",
     version=APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -30,11 +72,47 @@ app = FastAPI(
 # Enable CORS for internal frontend microservice communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Parameterized or restricted in production service mesh
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def prometheus_metrics_middleware(request: Request, call_next: Callable) -> Response:
+    """HTTP middleware tracking RED metrics: Rate, Errors, Duration."""
+    method = request.method
+    path = request.url.path
+
+    # Normalize metrics path or skip high-frequency scraping endpoints if desired
+    # We track all application traffic
+    start_time = time.time()
+
+    if PROMETHEUS_AVAILABLE:
+        IN_PROGRESS.labels(method=method, endpoint=path).inc()
+
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception:
+        status_code = 500
+        raise
+    finally:
+        duration = time.time() - start_time
+        if PROMETHEUS_AVAILABLE:
+            IN_PROGRESS.labels(method=method, endpoint=path).dec()
+            REQUEST_COUNT.labels(method=method, endpoint=path, status=str(status_code)).inc()
+            REQUEST_LATENCY.labels(method=method, endpoint=path).observe(duration)
+        else:
+            _fallback_stats["requests_total"] += 1
+            if status_code >= 400:
+                _fallback_stats["errors_total"] += 1
+            _fallback_stats["latency_sum"] += duration
+            key = f"{method}_{path}_{status_code}"
+            _fallback_stats["status_counts"][key] = _fallback_stats["status_counts"].get(key, 0) + 1
 
 
 class HealthResponse(BaseModel):
@@ -67,6 +145,7 @@ async def root() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
         "info": "/info",
+        "metrics": "/metrics",
     }
 
 
@@ -104,6 +183,89 @@ async def service_info() -> InfoResponse:
         environment=ENVIRONMENT,
         python_version=sys.version.split()[0],
     )
+
+
+@app.get(
+    "/metrics",
+    tags=["Observability"],
+    summary="Prometheus Metrics Scrape Endpoint",
+    description="Exposes application-level RED metrics in Prometheus exposition format.",
+)
+async def metrics() -> Response:
+    if PROMETHEUS_AVAILABLE:
+        data = generate_latest(REGISTRY)
+        return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+    
+    # Text-formatted Prometheus fallback
+    uptime = time.time() - START_TIME
+    lines = [
+        "# HELP http_requests_total Total number of HTTP requests processed.",
+        "# TYPE http_requests_total counter",
+        f'http_requests_total{{service="{SERVICE_NAME}"}} {_fallback_stats["requests_total"]}',
+        "# HELP http_request_errors_total Total number of HTTP 4xx/5xx errors.",
+        "# TYPE http_request_errors_total counter",
+        f'http_request_errors_total{{service="{SERVICE_NAME}"}} {_fallback_stats["errors_total"]}',
+        "# HELP process_uptime_seconds Application process uptime in seconds.",
+        "# TYPE process_uptime_seconds gauge",
+        f'process_uptime_seconds{{service="{SERVICE_NAME}"}} {uptime:.2f}',
+    ]
+    return PlainTextResponse("\n".join(lines) + "\n")
+
+
+# ============================================================================
+# Fault Injection & Testing Endpoints (For Runbook & Alert Verification)
+# ============================================================================
+
+@app.get(
+    "/simulate/latency",
+    tags=["Testing & Runbook"],
+    summary="Simulate High Latency",
+    description="Deliberately delays response to test High Latency alert rules.",
+)
+async def simulate_latency(
+    seconds: float = Query(default=1.5, ge=0.1, le=10.0, description="Delay in seconds")
+) -> dict[str, str | float]:
+    await asyncio.sleep(seconds)
+    return {
+        "status": "simulated_latency_completed",
+        "delay_seconds": seconds,
+        "message": f"Response intentionally delayed by {seconds}s for Alertmanager validation.",
+    }
+
+
+@app.get(
+    "/simulate/error",
+    tags=["Testing & Runbook"],
+    summary="Simulate HTTP Error",
+    description="Deliberately raises an HTTP error status (e.g. 500, 503) to test High Error Rate alerts.",
+)
+async def simulate_error(
+    status_code: int = Query(default=500, ge=400, le=599, description="HTTP Error code to return")
+) -> None:
+    raise HTTPException(
+        status_code=status_code,
+        detail=f"Intentional test failure with HTTP {status_code} for Alertmanager validation.",
+    )
+
+
+@app.post(
+    "/simulate/crash",
+    tags=["Testing & Runbook"],
+    summary="Simulate Pod Crash",
+    description="Deliberately terminates the backend process to test Pod CrashLoopBackOff alerts.",
+)
+async def simulate_crash() -> dict[str, str]:
+    # Schedule exit after responding so the client receives the notice
+    def _exit():
+        time.sleep(0.5)
+        os._exit(1)
+
+    import threading
+    threading.Thread(target=_exit, daemon=True).start()
+    return {
+        "status": "terminating",
+        "message": "Process exit scheduled in 0.5s to trigger Kubernetes restart and CrashLoop alert.",
+    }
 
 
 if __name__ == "__main__":

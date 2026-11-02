@@ -1,0 +1,63 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: parallax-alert-rules
+  namespace: {{ .Values.global.namespace | default "monitoring" }}
+  labels:
+    role: alert-rules
+    release: prometheus-stack
+    app.kubernetes.io/name: {{ .Chart.Name }}
+spec:
+  groups:
+    - name: parallax-microservices.rules
+      rules:
+        # Rule 1: High Latency (RED: Duration)
+        - alert: HighRequestLatency
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le)) > 0.50
+          for: 1m
+          labels:
+            severity: warning
+            team: devops
+            service: backend
+          annotations:
+            summary: "High P95 latency detected on {{ `{{ $labels.service }}` }}"
+            description: "P95 request latency is {{ `{{ $value | humanizeDuration }}` }} (threshold: 500ms). System is degrading."
+            runbook_url: "https://github.com/blosny/parallax-devops-platform/blob/main/docs/RUNBOOK.md#1-highrequestlatency"
+
+        # Rule 2: Pod Crash / Restart (USE: Errors / Saturation)
+        - alert: PodCrashLooping
+          expr: (rate(kube_pod_container_status_restarts_total{container=~"backend|frontend"}[5m]) * 60) > 0
+          for: 1m
+          labels:
+            severity: critical
+            team: devops
+            service: microservices
+          annotations:
+            summary: "Container crash or restart loop on pod {{ `{{ $labels.pod }}` }}"
+            description: "Pod {{ `{{ $labels.pod }}` }} in namespace {{ `{{ $labels.namespace }}` }} has restarted recently. Investigation required."
+            runbook_url: "https://github.com/blosny/parallax-devops-platform/blob/main/docs/RUNBOOK.md#2-podcrashlooping"
+
+        # Rule 3: High Error Rate (RED: Errors)
+        - alert: HighHttpErrorRate
+          expr: (sum(rate(http_requests_total{status=~"5.."}[1m])) / sum(rate(http_requests_total[1m]))) * 100 > 5
+          for: 1m
+          labels:
+            severity: critical
+            team: devops
+            service: backend
+          annotations:
+            summary: "Elevated HTTP 5xx error rate ({{ `{{ $value }}` }}%)"
+            description: "HTTP 5xx server error rate has exceeded the 5% error budget threshold over the last 1 minute."
+            runbook_url: "https://github.com/blosny/parallax-devops-platform/blob/main/docs/RUNBOOK.md#3-highhttperrorrate"
+
+        # Rule 4: Target Down / Service Unreachable
+        - alert: MicroserviceTargetDown
+          expr: up{job=~".*backend.*|.*frontend.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            team: devops
+          annotations:
+            summary: "Microservice scrape target down"
+            description: "Target {{ `{{ $labels.instance }}` }} (job {{ `{{ $labels.job }}` }}) cannot be scraped by Prometheus."
+            runbook_url: "https://github.com/blosny/parallax-devops-platform/blob/main/docs/RUNBOOK.md#4-microservicetargetdown"

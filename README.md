@@ -5,7 +5,8 @@
 [![Week 1 Deliverable](https://img.shields.io/badge/Week%201-Accepted%20(100%2F100)-238636?style=flat-square)](#)
 [![Week 2 Deliverable](https://img.shields.io/badge/Week%202-Accepted%20(100%2F100)-238636?style=flat-square)](#)
 [![Week 3 Deliverable](https://img.shields.io/badge/Week%203-Accepted%20(100%2F100)-238636?style=flat-square)](#)
-[![Week 4 Deliverable](https://img.shields.io/badge/Week%204-Complete%20%26%20Synchronized-238636?style=flat-square)](#)
+[![Week 4 Deliverable](https://img.shields.io/badge/Week%204-Accepted%20(100%2F100)-238636?style=flat-square)](#)
+[![Week 5 Deliverable](https://img.shields.io/badge/Week%205-Complete%20%26%20Verified-238636?style=flat-square)](#)
 
 > **"Built different. Engineered better."**  
 > A self-hosted enterprise infrastructure platform running entirely on local virtualization, engineered according to production-grade security, scalability, and 12-Factor principles.
@@ -21,9 +22,132 @@ This repository maintains the entire 6-week progressive infrastructure lifecycle
 | **Week 1** | Microservices & Containerization Foundation | **Accepted (100/100)** | FastAPI, Nginx Alpine, Docker Multi-Stage, Non-Root (`USER 1001`) |
 | **Week 2** | Helm, Service Mesh & Strict mTLS | **Accepted (100/100)** | Minikube (K8s v1.30), Helm v4, Istio Service Mesh, Envoy Sidecars, Strict mTLS |
 | **Week 3** | Kong Gateway & CI Pipeline | **Accepted (100/100)** | Kong Ingress Controller, Rate Limiting (5/min), API Key Auth, GitHub Actions, GHCR |
-| **Week 4** | GitOps Continuous Deployment | **Complete & Verified** | ArgoCD, Declarative GitOps Application, Auto-Sync, Self-Healing, Slack Alerts |
-| **Week 5** | Observability, Monitoring & Alerting | Planned | Prometheus, Grafana, Custom Dashboards, Alertmanager |
+| **Week 4** | GitOps Continuous Deployment | **Accepted (100/100)** | ArgoCD, Declarative GitOps Application, Auto-Sync, Self-Healing, Slack Alerts |
+| **Week 5** | Observability, Monitoring & Alerting | **Complete & Verified** | Prometheus Operator, Grafana, Dashboard-as-Code, Alertmanager, RED Metrics |
 | **Week 6** | Canary Deployments & Final Project Polish | Planned | Flagger/Argo Rollouts, Canary Traffic Shifting, Production Hardening |
+
+---
+
+## 📊 Week 5 Deliverable: Observability, RED Metrics & Alerting
+
+### Weekly Milestone Objectives
+- [x] **Prometheus & Grafana via Helm (`helm/observability`):** Packaged and configured production-grade `kube-prometheus-stack` values file with custom NodePort configurations for Grafana (`:30300`), Prometheus (`:30090`), and Alertmanager (`:30093`).
+- [x] **Application-Level Telemetry (`/metrics`):** Instrumentated FastAPI backend with HTTP middleware capturing request counts, latency histograms (P50/P90/P95/P99), and in-progress connections.
+- [x] **Code-Provisioned Grafana Dashboard (`Dashboard-as-Code`):** Built 16-panel Grafana dashboard (`parallax-red-dashboard.json`) provisioned automatically via Kubernetes ConfigMap (`grafana_dashboard: "1"`), visualizing the **RED Method** (Rate, Errors, Duration) and **USE Method** (Pod CPU/Memory Saturation).
+- [x] **Alertmanager Multi-Rule Configuration & Webhook Routing:** Configured 4 automated alert rules with multi-channel routing, inhibition rules, and webhook dispatching:
+  1. `HighRequestLatency`: P95 duration > 500ms for 1m (Warning).
+  2. `PodCrashLooping`: Container restart detected in 5m (Critical).
+  3. `HighHttpErrorRate`: HTTP 5xx error rate > 5% for 1m (Critical).
+  4. `MicroserviceTargetDown`: Scrape target unreachable for 1m (Critical).
+- [x] **SRE Incident Response Runbook (`docs/RUNBOOK.md`):** Authored enterprise-grade runbook detailing Golden Signals, SLO/SLA error budgets, triage commands, and deliberate fault injection procedures.
+- [x] **Simulated Load & Fault Injection Test Suite:** Built multi-threaded load generator (`scripts/simulate_load.py`) and fault injection endpoints (`/simulate/latency`, `/simulate/error`, `/simulate/crash`) to deliberately trigger each alert and validate dashboard responsiveness under load.
+
+---
+
+## 🏗️ Observability & Telemetry Architecture
+
+```mermaid
+graph TB
+    subgraph Clients["Traffic Sources & Testing Tools"]
+        LoadGen["Load Generator (scripts/simulate_load.py)"]
+        CurlTest["Fault Injection Suite (scripts/trigger_alerts.sh)"]
+    end
+
+    subgraph KongNS["kong Namespace (Ingress Layer)"]
+        KongProxy["Kong API Gateway (:32080)<br/>API Key Auth + Rate Limiting"]
+    end
+
+    subgraph DefaultNS["default Namespace (Workloads)"]
+        Frontend["Frontend Service (Nginx)"]
+        Backend["Backend Service (FastAPI)<br/>Instrumented /metrics + /simulate/*"]
+        Frontend -->|"mTLS Tunnel"| Backend
+    end
+
+    subgraph MonitoringNS["monitoring Namespace (Observability Stack)"]
+        Prometheus["Prometheus Server (:30090)<br/>15s Scrape Interval"]
+        Alertmanager["Alertmanager (:30093)<br/>Grouping + Inhibition + Webhook"]
+        Grafana["Grafana Server (:30300)<br/>Dashboard-as-Code Sidecar"]
+        DashConfigMap["ConfigMap: parallax-red-dashboard<br/>(label: grafana_dashboard='1')"]
+
+        DashConfigMap -.->|"Auto-Discovered by Sidecar"| Grafana
+        Prometheus ==>|"Scrapes /metrics via ServiceMonitor"| Backend
+        Prometheus ==>|"Scrapes /health"| Frontend
+        Prometheus -->|"Fires Alerts (P95>500ms, 5xx>5%, Restarts>0)"| Alertmanager
+        Grafana -->|"Queries Metrics (PromQL)"| Prometheus
+    end
+
+    subgraph Notifications["Alert Notification Channels"]
+        SlackWebhook["DevOps Webhook / Slack Channel"]
+        Alertmanager -->|"Dispatches JSON Payloads"| SlackWebhook
+    end
+
+    Clients --> KongProxy
+    KongProxy --> Frontend
+    KongProxy --> Backend
+```
+
+---
+
+## 📈 RED Method Telemetry Formulations
+
+The custom Grafana dashboard provisioned in `helm/observability/dashboards/parallax-red-dashboard.json` visualizes the three core golden signals:
+
+| Signal | Metric Description | PromQL Query Formulation | Threshold / SLA |
+|:---|:---|:---|:---:|
+| **Rate (R)** | Total HTTP throughput by endpoint and method | `sum(rate(http_requests_total[1m])) by (method, endpoint)` | Nominal baseline |
+| **Errors (E)** | HTTP 5xx error percentage over total traffic | `(sum(rate(http_requests_total{status=~"5.."}[1m])) / sum(rate(http_requests_total[1m]))) * 100` | `< 5.0%` (Error Budget) |
+| **Duration (D)** | 95th percentile (P95) request latency | `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))` | `< 0.50s` (500ms SLA) |
+| **Saturation** | Pod Memory Working Set / CPU Usage | `sum(container_memory_working_set_bytes{container="backend"}) by (pod)` | `< 256Mi` |
+
+---
+
+## 🚀 Running & Validating Week 5 Observability
+
+### 1. Install / Upgrade Observability Stack via Helm
+```bash
+# Add official Prometheus Community chart repository
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# Install kube-prometheus-stack using our custom enterprise values
+helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  -f helm/observability/values.yaml
+
+# Apply the code-provisioned dashboard ConfigMap and Alert Rules
+helm upgrade --install parallax-observability helm/observability \
+  --namespace monitoring
+```
+
+### 2. Access Web Observability Portals
+* **Grafana Dashboard:** `http://localhost:30300`  
+  - *Username:* `admin` | *Password:* `parallax-admin-2026`  
+  - *Dashboard:* Navigate to **Parallax Platform - Microservices RED Observability**
+* **Prometheus Targets & Queries:** `http://localhost:30090`
+* **Alertmanager Active Alarms:** `http://localhost:30093`
+
+### 3. Generate Simulated Load & Verify Dashboard
+Run the Python load testing script to generate realistic traffic across all endpoints:
+```bash
+python scripts/simulate_load.py --target http://localhost:32080 --rps 20 --duration 60
+```
+
+### 4. Deliberately Trigger Alarms & Test Runbook
+Validate that Alertmanager detects anomalies according to [docs/RUNBOOK.md](docs/RUNBOOK.md):
+```bash
+# Trigger High Latency Alert (>500ms):
+curl -s "http://localhost:32080/simulate/latency?seconds=1.5" -H "apikey: parallax-secret-key-2026"
+
+# Trigger High Error Rate Alert (HTTP 500 Spike):
+for i in {1..20}; do curl -s "http://localhost:32080/simulate/error?status_code=500" -H "apikey: parallax-secret-key-2026"; done
+
+# Trigger Pod CrashLooping Alert:
+curl -X POST "http://localhost:32080/simulate/crash" -H "apikey: parallax-secret-key-2026"
+```
+
+---
+
 
 ---
 
@@ -98,25 +222,45 @@ parallax-devops-platform/
 │   └── workflows/
 │       └── ci.yml                    # Automated CI Pipeline (Lint, Test, Build, GHCR Push)
 │
+├── docs/
+│   ├── RUNBOOK.md                    # SRE Incident Response Runbook (Golden Signals & Alerts)
+│   ├── NOTES.md                      # DevOps Engineering Architecture Decisions
+│   └── TODO.md                       # 6-Week Progress & Deliverables Tracker
+│
 ├── gitops/
-│   ├── application.yaml              # ArgoCD Declarative Application (Auto-Sync & Self-Heal)
+│   ├── application.yaml              # ArgoCD Declarative Application (Microservices Auto-Sync)
+│   ├── observability-application.yaml# ArgoCD Declarative Application (Observability Stack)
 │   └── notifications.yaml            # ArgoCD Notifications ConfigMap (Slack/Webhook alerts)
 │
 ├── helm/
-│   └── microservices/                # Consolidated Parameterized Helm Chart
-│       ├── Chart.yaml                # Chart metadata (v1.0.0)
-│       ├── values.yaml               # Parameterized configuration (Replicas: 2, Gateway)
+│   ├── microservices/                # Consolidated Parameterized Helm Chart
+│   │   ├── Chart.yaml                # Chart metadata (v1.0.0)
+│   │   ├── values.yaml               # Parameterized configuration (Replicas, Probes, ServiceMonitor)
+│   │   └── templates/
+│   │       ├── backend-deployment.yaml   # Backend Deployment with Prometheus annotations
+│   │       ├── backend-service.yaml      # Backend ClusterIP Service (:8000)
+│   │       ├── frontend-deployment.yaml  # Frontend Deployment spec & probes
+│   │       ├── frontend-service.yaml     # Frontend NodePort Service (:3000)
+│   │       ├── servicemonitor.yaml       # Prometheus Operator ServiceMonitor custom resources
+│   │       ├── ingress.yaml              # Kong Ingress rules (Public & Protected routes)
+│   │       ├── kong-plugins.yaml         # KongPlugin (rate-limiting, key-auth, consumer, secret)
+│   │       └── peer-authentication.yaml  # Istio PeerAuthentication policies (STRICT mTLS)
+│   │
+│   └── observability/                # Observability Stack Helm Chart & Values
+│       ├── Chart.yaml                # Observability chart definition
+│       ├── values.yaml               # Custom kube-prometheus-stack values (Grafana, Alertmanager)
+│       ├── dashboards/
+│       │   └── parallax-red-dashboard.json # 16-panel code-provisioned Grafana RED Dashboard
 │       └── templates/
-│           ├── backend-deployment.yaml   # Backend Deployment spec & probes
-│           ├── backend-service.yaml      # Backend ClusterIP Service (:8000)
-│           ├── frontend-deployment.yaml  # Frontend Deployment spec & probes
-│           ├── frontend-service.yaml     # Frontend NodePort Service (:3000)
-│           ├── ingress.yaml              # Kong Ingress rules (Public & Protected routes)
-│           ├── kong-plugins.yaml         # KongPlugin (rate-limiting, key-auth, consumer, secret)
-│           └── peer-authentication.yaml  # Istio PeerAuthentication policies
+│           ├── dashboard-configmap.yaml    # ConfigMap provisioning dashboard via Grafana sidecar
+│           └── alert-rules.yaml            # PrometheusRule CRD (Latency, Crash, 5xx Errors)
+│
+├── scripts/
+│   ├── simulate_load.py              # Multi-threaded HTTP load generator for RED metrics
+│   └── trigger_alerts.sh             # Automated script to deliberately trigger all 3 alert rules
 │
 ├── services/
-│   ├── backend/                      # Python FastAPI JSON API Microservice
+│   ├── backend/                      # Python FastAPI JSON API Microservice (/health, /info, /metrics)
 │   └── frontend/                     # Lightweight HTTP Observability Dashboard
 │
 ├── README.md                         # Primary project documentation
@@ -234,6 +378,9 @@ kubectl port-forward svc/argocd-server -n argocd 8080:80
 
 | Tool | Verified Version | Environment / Notes |
 |:---|:---:|:---|
+| **Prometheus** | `v2.50.0` (Chart `kube-prometheus-stack`) | Time-series metrics collection & PromQL engine |
+| **Grafana** | `v10.3.0` (Chart `kube-prometheus-stack`) | Observability visualization & Dashboard-as-Code |
+| **Alertmanager** | `v0.27.0` (Chart `kube-prometheus-stack`) | Alert routing, grouping, and notification dispatcher |
 | **ArgoCD** | `v3.5.6` (Chart `v10.11.6`) | Declarative GitOps continuous delivery engine |
 | **Kong API Gateway** | `v3.9.4` (Chart `v3.4.1`) | Cloud-native API Gateway & Ingress Controller |
 | **Istio Service Mesh** | `v1.30.5` | Control plane (`istiod`) and Envoy data plane (`proxyv2`) |
@@ -242,10 +389,3 @@ kubectl port-forward svc/argocd-server -n argocd 8080:80
 | **Docker Engine & CLI** | `v29.8.1` | Docker Desktop with WSL 2 integration |
 | **kubectl** | `v1.36.1` | Kubernetes client CLI |
 | **Git** | `v2.55.0` | Distributed version control |
-
----
-
-## 👤 Author
-- **Engineer:** Bilgisayar Mühendisliği / DevOps Engineer Intern
-- **Program:** Parallax Labs - Track B: 6-Week Standard Program
-- **Repository:** [github.com/blosny/parallax-devops-platform](https://github.com/blosny/parallax-devops-platform)

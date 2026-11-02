@@ -80,3 +80,10 @@ gateway:
     keyName: apikey
     consumer: parallax-developer
     secretKey: parallax-secret-key-2026
+
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+

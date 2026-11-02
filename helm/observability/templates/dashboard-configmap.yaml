@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parallax-red-dashboard-configmap
+  namespace: {{ .Values.global.namespace | default "monitoring" }}
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  parallax-red-dashboard.json: |-
+{{ .Files.Get "dashboards/parallax-red-dashboard.json" | indent 4 }}
+

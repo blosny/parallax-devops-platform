@@ -1,0 +1,36 @@
+{{- if and .Values.observability (and .Values.observability.serviceMonitor .Values.observability.serviceMonitor.enabled) }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.backend.name }}-monitor
+  labels:
+    app: {{ .Values.backend.name }}
+    release: prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.backend.name }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.observability.serviceMonitor.interval | default "15s" }}
+      scrapeTimeout: {{ .Values.observability.serviceMonitor.scrapeTimeout | default "10s" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.frontend.name }}-monitor
+  labels:
+    app: {{ .Values.frontend.name }}
+    release: prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.frontend.name }}
+  endpoints:
+    - port: http
+      path: /health
+      interval: {{ .Values.observability.serviceMonitor.interval | default "15s" }}
+      scrapeTimeout: {{ .Values.observability.serviceMonitor.scrapeTimeout | default "10s" }}
+{{- end }}
+

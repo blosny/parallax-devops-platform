@@ -1,0 +1,16 @@
+apiVersion: v2
+name: parallax-observability
+description: Helm Chart for Parallax DevOps Platform Observability Stack (Prometheus, Grafana, Alertmanager)
+type: application
+version: 1.0.0
+appVersion: "v0.73.0"
+keywords:
+  - monitoring
+  - observability
+  - prometheus
+  - grafana
+  - alertmanager
+maintainers:
+  - name: Parallax DevOps Team
+    email: tahabugracicek.dev@gmail.com
+

@@ -15,6 +15,10 @@ spec:
       labels:
         app: {{ .Values.frontend.name }}
         env: {{ .Values.global.environment }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.frontend.service.targetPort }}"
+        prometheus.io/path: "/health"
     spec:
       containers:
         - name: {{ .Values.frontend.name }}

@@ -15,6 +15,10 @@ spec:
       labels:
         app: {{ .Values.backend.name }}
         env: {{ .Values.global.environment }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.backend.service.targetPort }}"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: {{ .Values.backend.name }}
