@@ -1,0 +1,39 @@
+{{- if and .Values.backend.rollout .Values.backend.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: backend-success-rate
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    env: {{ .Values.global.environment }}
+spec:
+  args:
+    - name: service-name
+      value: {{ .Values.backend.name }}
+  metrics:
+    - name: success-rate
+      interval: 10s
+      successCondition: result[0] >= 0.95
+      failureLimit: 3
+      count: 5
+      provider:
+        prometheus:
+          address: http://prometheus-stack-kube-prom-prometheus.monitoring.svc:9090
+          query: |
+            (
+              sum(rate(http_requests_total{status!~"5.."}[1m]))
+              /
+              sum(rate(http_requests_total[1m]))
+            ) or vector(1)
+    - name: p95-latency
+      interval: 10s
+      successCondition: result[0] <= 0.50
+      failureLimit: 3
+      count: 5
+      provider:
+        prometheus:
+          address: http://prometheus-stack-kube-prom-prometheus.monitoring.svc:9090
+          query: |
+            histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le)) or vector(0.05)
+{{- end }}
+

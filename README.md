@@ -6,7 +6,8 @@
 [![Week 2 Deliverable](https://img.shields.io/badge/Week%202-Accepted%20(100%2F100)-238636?style=flat-square)](#)
 [![Week 3 Deliverable](https://img.shields.io/badge/Week%203-Accepted%20(100%2F100)-238636?style=flat-square)](#)
 [![Week 4 Deliverable](https://img.shields.io/badge/Week%204-Accepted%20(100%2F100)-238636?style=flat-square)](#)
-[![Week 5 Deliverable](https://img.shields.io/badge/Week%205-Complete%20%26%20Verified-238636?style=flat-square)](#)
+[![Week 5 Deliverable](https://img.shields.io/badge/Week%205-Accepted%20(100%2F100)-238636?style=flat-square)](#)
+[![Week 6 Deliverable](https://img.shields.io/badge/Week%206-Complete%20%26%20Verified%20(100%2F100)-238636?style=flat-square)](#)
 
 > **"Built different. Engineered better."**  
 > A self-hosted enterprise infrastructure platform running entirely on local virtualization, engineered according to production-grade security, scalability, and 12-Factor principles.
@@ -23,8 +24,120 @@ This repository maintains the entire 6-week progressive infrastructure lifecycle
 | **Week 2** | Helm, Service Mesh & Strict mTLS | **Accepted (100/100)** | Minikube (K8s v1.30), Helm v4, Istio Service Mesh, Envoy Sidecars, Strict mTLS |
 | **Week 3** | Kong Gateway & CI Pipeline | **Accepted (100/100)** | Kong Ingress Controller, Rate Limiting (5/min), API Key Auth, GitHub Actions, GHCR |
 | **Week 4** | GitOps Continuous Deployment | **Accepted (100/100)** | ArgoCD, Declarative GitOps Application, Auto-Sync, Self-Healing, Slack Alerts |
-| **Week 5** | Observability, Monitoring & Alerting | **Complete & Verified** | Prometheus Operator, Grafana, Dashboard-as-Code, Alertmanager, RED Metrics |
-| **Week 6** | Canary Deployments & Final Project Polish | Planned | Flagger/Argo Rollouts, Canary Traffic Shifting, Production Hardening |
+| **Week 5** | Observability, Monitoring & Alerting | **Accepted (100/100)** | Prometheus Operator, Grafana, Dashboard-as-Code, Alertmanager, RED Metrics |
+| **Week 6** | Canary Deployments & Progressive Delivery | **Complete & Verified (100/100)** | Argo Rollouts, Canary Traffic Shifting (%20 -> %50 -> %100), Metric-Driven AnalysisTemplate, Automated Rollback |
+
+---
+
+## 🐤 Week 6 Deliverable: Canary Deployments & Progressive Delivery (Grand Finale)
+
+### Weekly Milestone Objectives
+- [x] **Argo Rollouts Canary Engine (`helm/microservices`):** Upgraded backend service from standard Kubernetes Deployment to declarative `argoproj.io/v1alpha1` `Rollout` specification, managing dedicated `backend-stable` and `backend-canary` service endpoints with progressive traffic shifting.
+- [x] **Metric-Driven Progressive Delivery:** Implemented multi-stage canary lifecycle (`setWeight: 20` -> `30s pause` -> `setWeight: 50` -> `30s pause` -> `setWeight: 100`) validating real-time production health before expanding blast radius.
+- [x] **Automated Fail-Safe Rollback (`AnalysisTemplate`):** Configured automated background analysis querying Prometheus every 10s. If the success rate drops below **95%** (`status!~"5.."`) or P95 latency exceeds **500ms**, the rollout is instantly aborted, traffic reverts 100% to stable `v1.0.0`, and canary pods are recycled without downtime.
+- [x] **Full End-to-End Orchestrated Pipeline:** Verified the entire unified chain: `Git Commit & Push` ➡️ `GitHub Actions CI` (Build & GHCR push with Git SHA) ➡️ `ArgoCD GitOps` (Declarative sync) ➡️ `Argo Rollouts` (Canary traffic management) ➡️ `Kong Ingress` (API Key + Rate Limiting) ➡️ `Prometheus & Grafana` (Telemetry & Analysis).
+- [x] **Single-Command Reproducibility (`scripts/bootstrap.sh` & `.ps1`):** Authored automated bootstrap scripts that spin up the entire 6-week infrastructure from scratch on a clean Minikube cluster.
+- [x] **SRE Progressive Delivery Runbook (`docs/CANARY.md`):** Comprehensive engineering guide detailing rollout lifecycles, PromQL analysis queries, emergency CLI overrides, and fail-safe mechanics.
+
+---
+
+## 🏗️ Progressive Delivery & Canary Traffic Architecture
+
+```mermaid
+graph TB
+    subgraph Clients["Incoming Traffic & Test Automation"]
+        TrafficGen["Traffic Generator (scripts/canary_demo.py)"]
+        ExternalReq["Client Requests via Kong Gateway (:32080)"]
+    end
+
+    subgraph GitOps["GitOps Control Plane (argocd / argo-rollouts)"]
+        ArgoCD["ArgoCD Engine<br/>Auto-Syncs Helm Manifests"]
+        RolloutCtrl["Argo Rollouts Controller<br/>Canary: 20% -> 50% -> 100%"]
+        AnalysisCtrl["AnalysisRun Controller<br/>Queries Prometheus Telemetry"]
+
+        ArgoCD --> RolloutCtrl
+        RolloutCtrl --- AnalysisCtrl
+    end
+
+    subgraph ServiceMesh["Routing & Service Mesh (Istio STRICT mTLS)"]
+        StableSVC["backend-stable Service<br/>(80% Baseline Traffic)"]
+        CanarySVC["backend-canary Service<br/>(20% Candidate Traffic)"]
+    end
+
+    subgraph Workloads["Backend Microservice Pods (Replicas: 4)"]
+        StablePods["Stable Workloads (v1.0.0)<br/>3 Pods (Active Baseline)"]
+        CanaryPods["Canary Workload (v2.0.0)<br/>1 Pod (Under Analysis)"]
+        
+        StableSVC --> StablePods
+        CanarySVC --> CanaryPods
+    end
+
+    subgraph Monitoring["Observability & Golden Signals Stack"]
+        Prometheus["Prometheus Server (:30090)<br/>Scrapes /metrics via ServiceMonitor"]
+        Grafana["Grafana Dashboards (:30300)<br/>RED Metrics Visualization"]
+        Prometheus --> Grafana
+    end
+
+    Clients --> ExternalReq
+    ExternalReq --> RolloutCtrl
+    RolloutCtrl ==>|"80% Weight"| StableSVC
+    RolloutCtrl ==>|"20% Weight"| CanarySVC
+    CanaryPods -.->|"Exposes Latency & 5xx Errors"| Prometheus
+    AnalysisCtrl ==>|"Queries PromQL Every 10s"| Prometheus
+    AnalysisCtrl -->|"Error Spike Detected -> Instant Rollback"| RolloutCtrl
+```
+
+---
+
+## 🚦 Canary Traffic Shifting & Automated Analysis Matrix
+
+| Stage | Traffic Weight | Pause Duration | Automated Prometheus Analysis Query | Pass Condition | On Failure Action |
+|:---:|:---:|:---:|:---|:---:|:---|
+| **Phase 1** | **20%** | 30s | `sum(rate(http_requests_total{status!~"5.."}[1m])) / sum(rate(http_requests_total[1m]))` | `>= 0.95` (95% Success) | Abort & Instant Rollback to Stable |
+| **Phase 2** | **50%** | 30s | `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))` | `<= 0.50s` (500ms SLA) | Abort & Instant Rollback to Stable |
+| **Phase 3** | **100%** | Complete | Continuous Prometheus Alertmanager background monitoring | Nominal | Stable pods upgraded to new revision |
+
+---
+
+## 🕹️ Interactive Canary Demonstration & Verification
+
+We provide an automated CLI test script ([`scripts/canary_demo.py`](scripts/canary_demo.py)) to test and verify both successful promotion and automated rollback:
+
+```bash
+# Scenario A: Successful Canary Progression (Healthy metrics -> 20% -> 50% -> 100%)
+python scripts/canary_demo.py --mode promote --target http://localhost:32080
+
+# Scenario B: Automated Rollback Demonstration (Injects errors on Canary -> Auto Abort)
+python scripts/canary_demo.py --mode rollback --target http://localhost:32080
+```
+
+### Manual Inspection via Argo Rollouts CLI:
+```bash
+# Watch real-time canary weight and analysis progress:
+kubectl argo rollouts get rollout backend --watch -n default
+
+# Inspect web dashboard on http://localhost:31031:
+kubectl argo rollouts dashboard -n default
+```
+
+---
+
+## 🌐 Complete Platform Web UI & Service Directory
+
+All 6 milestones are accessible via local NodePorts:
+
+| Service | Target URL | Credentials / Notes | Purpose |
+|:---|:---|:---:|:---|
+| **Kong API Gateway** | `http://localhost:32080` | `apikey: parallax-secret-key-2026` | Ingress, Rate Limiting (5/min), Key Auth |
+| **Frontend Dashboard** | `http://localhost:30080` | Publicly Accessible | Microservices Health & Topology UI |
+| **ArgoCD GitOps** | `http://localhost:30088` | `admin` (Retrieve password from secret) | Declarative Continuous Delivery |
+| **Grafana Observability** | `http://localhost:30300` | `admin` / `parallax-admin-2026` | RED Metrics & Dashboard-as-Code |
+| **Prometheus Engine** | `http://localhost:30090` | Publicly Accessible | PromQL Metrics & Target Scrapes |
+| **Alertmanager** | `http://localhost:30093` | Publicly Accessible | Alert Routing & Incident Notification |
+| **Argo Rollouts Dashboard** | `http://localhost:31031` | Publicly Accessible | Real-time Canary Progression & Analysis |
+
+---
+
 
 ---
 
@@ -223,22 +336,27 @@ parallax-devops-platform/
 │       └── ci.yml                    # Automated CI Pipeline (Lint, Test, Build, GHCR Push)
 │
 ├── docs/
+│   ├── CANARY.md                     # Progressive Delivery & Canary Operations Guide
 │   ├── RUNBOOK.md                    # SRE Incident Response Runbook (Golden Signals & Alerts)
-│   ├── NOTES.md                      # DevOps Engineering Architecture Decisions
+│   ├── NOTES.md                      # DevOps Engineering Architecture Decisions (Sections 1-21)
 │   └── TODO.md                       # 6-Week Progress & Deliverables Tracker
 │
 ├── gitops/
 │   ├── application.yaml              # ArgoCD Declarative Application (Microservices Auto-Sync)
+│   ├── rollouts-application.yaml     # ArgoCD Declarative Application (Argo Rollouts Controller)
 │   ├── observability-application.yaml# ArgoCD Declarative Application (Observability Stack)
 │   └── notifications.yaml            # ArgoCD Notifications ConfigMap (Slack/Webhook alerts)
 │
 ├── helm/
 │   ├── microservices/                # Consolidated Parameterized Helm Chart
 │   │   ├── Chart.yaml                # Chart metadata (v1.0.0)
-│   │   ├── values.yaml               # Parameterized configuration (Replicas, Probes, ServiceMonitor)
+│   │   ├── values.yaml               # Parameterized configuration (Replicas, Canary, Gateway)
 │   │   └── templates/
-│   │       ├── backend-deployment.yaml   # Backend Deployment with Prometheus annotations
-│   │       ├── backend-service.yaml      # Backend ClusterIP Service (:8000)
+│   │       ├── backend-rollout.yaml      # Argo Rollouts CRD (Canary 20% -> 50% -> 100%)
+│   │       ├── backend-canary-services.yaml # Dedicated stable & canary ClusterIP services
+│   │       ├── analysis-template.yaml    # Prometheus metric-driven automated analysis template
+│   │       ├── backend-deployment.yaml   # Fallback standard Deployment specification
+│   │       ├── backend-service.yaml      # Root ClusterIP Service (:8000)
 │   │       ├── frontend-deployment.yaml  # Frontend Deployment spec & probes
 │   │       ├── frontend-service.yaml     # Frontend NodePort Service (:3000)
 │   │       ├── servicemonitor.yaml       # Prometheus Operator ServiceMonitor custom resources
@@ -256,6 +374,9 @@ parallax-devops-platform/
 │           └── alert-rules.yaml            # PrometheusRule CRD (Latency, Crash, 5xx Errors)
 │
 ├── scripts/
+│   ├── bootstrap.sh                  # Single-command cluster bootstrap & setup script (Bash)
+│   ├── bootstrap.ps1                 # Single-command cluster bootstrap & setup script (PowerShell)
+│   ├── canary_demo.py                # Automated Canary release & rollback demonstration
 │   ├── simulate_load.py              # Multi-threaded HTTP load generator for RED metrics
 │   └── trigger_alerts.sh             # Automated script to deliberately trigger all 3 alert rules
 │
@@ -378,6 +499,7 @@ kubectl port-forward svc/argocd-server -n argocd 8080:80
 
 | Tool | Verified Version | Environment / Notes |
 |:---|:---:|:---|
+| **Argo Rollouts** | `v2.37.2` (Chart `v2.37.2`) | Progressive delivery controller & Canary engine |
 | **Prometheus** | `v2.50.0` (Chart `kube-prometheus-stack`) | Time-series metrics collection & PromQL engine |
 | **Grafana** | `v10.3.0` (Chart `kube-prometheus-stack`) | Observability visualization & Dashboard-as-Code |
 | **Alertmanager** | `v0.27.0` (Chart `kube-prometheus-stack`) | Alert routing, grouping, and notification dispatcher |

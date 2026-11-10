@@ -1,3 +1,4 @@
+{{- if not (and .Values.backend.rollout .Values.backend.rollout.enabled) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,3 +34,5 @@ spec:
             {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+{{- end }}
+

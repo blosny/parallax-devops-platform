@@ -1,0 +1,47 @@
+{{- if and .Values.backend.rollout .Values.backend.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ .Values.backend.name }}
+  labels:
+    app: {{ .Values.backend.name }}
+    env: {{ .Values.global.environment }}
+spec:
+  replicas: {{ .Values.backend.replicaCount | default 4 }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ .Values.backend.name }}
+  strategy:
+    canary:
+      stableService: {{ .Values.backend.rollout.strategy.canary.stableService | default "backend-stable" }}
+      canaryService: {{ .Values.backend.rollout.strategy.canary.canaryService | default "backend-canary" }}
+      steps:
+        {{- toYaml .Values.backend.rollout.strategy.canary.steps | nindent 8 }}
+      analysis:
+        {{- toYaml .Values.backend.rollout.strategy.canary.analysis | nindent 8 }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.backend.name }}
+        env: {{ .Values.global.environment }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.backend.service.targetPort }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: {{ .Values.backend.name }}
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy | default .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.backend.service.targetPort }}
+              name: http
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+{{- end }}
+
