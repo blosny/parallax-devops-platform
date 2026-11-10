@@ -8,8 +8,9 @@ import asyncio
 from datetime import datetime, timezone
 import os
 import sys
+import threading
 import time
-from typing import Callable
+from typing import Callable, Union
 from fastapi import FastAPI, Request, Response, status, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
@@ -23,7 +24,7 @@ ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 # Record server boot timestamp to calculate uptime accurately
 START_TIME: float = time.time()
 
-# Prometheus metrics setup (with zero-dependency fallback)
+# Prometheus metrics setup with guaranteed symbol definitions for linters
 try:
     from prometheus_client import (
         Counter,
@@ -34,7 +35,24 @@ try:
         REGISTRY,
     )
     PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    Counter = None
+    Histogram = None
+    Gauge = None
+    generate_latest = None
+    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+    REGISTRY = None
 
+# Initialize Prometheus metrics or in-memory fallback
+_fallback_stats = {
+    "requests_total": 0,
+    "errors_total": 0,
+    "latency_sum": 0.0,
+    "status_counts": {},
+}
+
+if PROMETHEUS_AVAILABLE and Counter is not None and Histogram is not None and Gauge is not None:
     REQUEST_COUNT = Counter(
         "http_requests_total",
         "Total number of HTTP requests processed by endpoint and status code.",
@@ -51,15 +69,10 @@ try:
         "Number of HTTP requests currently being processed.",
         ["method", "endpoint"],
     )
-except ImportError:
-    PROMETHEUS_AVAILABLE = False
-    # In-memory metrics fallback
-    _fallback_stats = {
-        "requests_total": 0,
-        "errors_total": 0,
-        "latency_sum": 0.0,
-        "status_counts": {},
-    }
+else:
+    REQUEST_COUNT = None
+    REQUEST_LATENCY = None
+    IN_PROGRESS = None
 
 app = FastAPI(
     title="Parallax DevOps Platform - Backend API",
@@ -85,11 +98,9 @@ async def prometheus_metrics_middleware(request: Request, call_next: Callable) -
     method = request.method
     path = request.url.path
 
-    # Normalize metrics path or skip high-frequency scraping endpoints if desired
-    # We track all application traffic
     start_time = time.time()
 
-    if PROMETHEUS_AVAILABLE:
+    if PROMETHEUS_AVAILABLE and IN_PROGRESS is not None:
         IN_PROGRESS.labels(method=method, endpoint=path).inc()
 
     status_code = 500
@@ -102,7 +113,7 @@ async def prometheus_metrics_middleware(request: Request, call_next: Callable) -
         raise
     finally:
         duration = time.time() - start_time
-        if PROMETHEUS_AVAILABLE:
+        if PROMETHEUS_AVAILABLE and IN_PROGRESS is not None and REQUEST_COUNT is not None and REQUEST_LATENCY is not None:
             IN_PROGRESS.labels(method=method, endpoint=path).dec()
             REQUEST_COUNT.labels(method=method, endpoint=path, status=str(status_code)).inc()
             REQUEST_LATENCY.labels(method=method, endpoint=path).observe(duration)
@@ -192,7 +203,7 @@ async def service_info() -> InfoResponse:
     description="Exposes application-level RED metrics in Prometheus exposition format.",
 )
 async def metrics() -> Response:
-    if PROMETHEUS_AVAILABLE:
+    if PROMETHEUS_AVAILABLE and generate_latest is not None and REGISTRY is not None:
         data = generate_latest(REGISTRY)
         return Response(content=data, media_type=CONTENT_TYPE_LATEST)
     
@@ -224,7 +235,7 @@ async def metrics() -> Response:
 )
 async def simulate_latency(
     seconds: float = Query(default=1.5, ge=0.1, le=10.0, description="Delay in seconds")
-) -> dict[str, str | float]:
+) -> dict[str, Union[str, float]]:
     await asyncio.sleep(seconds)
     return {
         "status": "simulated_latency_completed",
@@ -255,12 +266,10 @@ async def simulate_error(
     description="Deliberately terminates the backend process to test Pod CrashLoopBackOff alerts.",
 )
 async def simulate_crash() -> dict[str, str]:
-    # Schedule exit after responding so the client receives the notice
     def _exit():
         time.sleep(0.5)
         os._exit(1)
 
-    import threading
     threading.Thread(target=_exit, daemon=True).start()
     return {
         "status": "terminating",
