@@ -1,0 +1,3 @@
+# Root dependency redirect for GitHub Actions & CI tooling
+-r services/backend/requirements.txt
+
